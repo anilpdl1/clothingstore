@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: clothing_ecommerce
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    ports: ["3306:3306"]
+    volumes: [mysql_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build: ./backend
+    command: >-
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    env_file: .env
+    environment:
+      # Containers reach MySQL by its Compose service name, not localhost.
+      DATABASE_URL: mysql+pymysql://root@db:3306/clothing_ecommerce
+    ports: ["8000:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build: ./frontend
+    ports: ["5173:5173"]
+    environment:
+      # This value is executed in the browser, so it must use the host port,
+      # not Docker's internal `api` hostname.
+      VITE_API_URL: http://localhost:8000/api
+    depends_on: [api]
+volumes: {mysql_data: {}}
