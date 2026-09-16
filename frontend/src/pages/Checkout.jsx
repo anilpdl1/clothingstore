@@ -27,6 +27,7 @@ export default function Checkout() {
     postal_code: "",
   });
   const [message, setMessage] = useState("");
+  const [isPaying, setIsPaying] = useState(false);
   const { cart } = useCart();
 
   async function loadAddresses() {
@@ -54,7 +55,9 @@ export default function Checkout() {
   }
 
   async function pay() {
+    if (isPaying) return;
     if (!address) return setMessage("Add and select a delivery address.");
+    setIsPaying(true);
     setMessage("Redirecting securely to eSewa…");
     try {
       const response = await api.post("/payments/create-order", {
@@ -63,6 +66,7 @@ export default function Checkout() {
       submitEsewaForm(response.data);
     } catch (error) {
       setMessage(error.response?.data?.detail || error.message);
+      setIsPaying(false);
     }
   }
 
@@ -120,9 +124,10 @@ export default function Checkout() {
         {message && <p className="mt-4 text-sm">{message}</p>}
         <button
           onClick={pay}
+          disabled={isPaying}
           className="mt-6 w-full rounded-full bg-ink py-3 text-white"
         >
-          Pay with eSewa
+          {isPaying ? "Redirecting to eSewa…" : "Pay with eSewa"}
         </button>
       </aside>
     </section>
