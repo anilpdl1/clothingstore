@@ -29,6 +29,7 @@ from app.schemas.schemas import PaymentCreateIn
 from app.services.commerce import cart_summary, price, validate_checkout
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
+TEST_GATEWAY_AMOUNT = Decimal("100000")
 
 
 def require_esewa_settings() -> None:
@@ -90,6 +91,7 @@ def create_payment_order(
     require_esewa_settings()
     cart = validate_checkout(db, user.id, data.address_id)
     summary = cart_summary(db, user.id)
+    gateway_amount = TEST_GATEWAY_AMOUNT
     transaction_uuid = f"ORD-{uuid.uuid4().hex[:24]}"
     order = Order(
         user_id=user.id,
@@ -98,7 +100,7 @@ def create_payment_order(
         subtotal=summary["subtotal"],
         discount=summary["discount"],
         shipping_cost=summary["shipping"],
-        total_amount=summary["total"],
+        total_amount=gateway_amount,
     )
     db.add(order)
     db.flush()
@@ -117,7 +119,7 @@ def create_payment_order(
             )
         )
 
-    total = amount_text(summary["total"])
+    total = amount_text(gateway_amount)
     fields: dict[str, object] = {
         "amount": total,
         "tax_amount": "0",
@@ -135,7 +137,7 @@ def create_payment_order(
         Payment(
             order_id=order.id,
             gateway_transaction_uuid=transaction_uuid,
-            amount=summary["total"],
+            amount=gateway_amount,
             currency="NPR",
             payment_method="ESEWA",
         )
