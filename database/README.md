@@ -1,8 +1,8 @@
 # Database migrations
 
-Alembic is already initialized in `backend/alembic`.  The repository-level
+Alembic is already initialized in `backend/alembic`. The repository-level
 `.env` supplies `DATABASE_URL`; do not add a URL to `alembic.ini` and do not
-run `alembic init` again.  For a new database, run:
+run `alembic init` again. For a new database, run:
 
 ```bash
 alembic upgrade head

@@ -148,20 +148,19 @@ def create_payment_order(
 @router.get("/esewa/success", include_in_schema=False)
 def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
     try:
-        print("\n========== ESEWA SUCCESS CALLBACK ==========")
+     
         print("Received data:", data)
 
         payload = json.loads(base64.b64decode(data).decode())
 
-        print("Decoded payload:", payload)
+       
 
         names = payload["signed_field_names"]
         received_signature = payload["signature"]
 
         generated_signature = signature(payload, names)
 
-        print("Received signature:", received_signature)
-        print("Generated signature:", generated_signature)
+        
 
         if not hmac.compare_digest(
             generated_signature,
@@ -182,8 +181,7 @@ def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
             .first()
         )
 
-        print("Payment found:", payment is not None)
-
+      
         if not payment:
             raise ValueError("Payment record not found")
 
@@ -199,8 +197,6 @@ def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
                 f"database={payment.amount}"
             )
 
-        print("Calling eSewa status API...")
-
         response = httpx.get(
             settings.esewa_status_url,
             params={
@@ -211,8 +207,6 @@ def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
             timeout=15,
         )
 
-        print("Status API HTTP status:", response.status_code)
-        print("Status API response:", response.text)
 
         response.raise_for_status()
 
@@ -242,11 +236,6 @@ def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
 
     except Exception as e:
         db.rollback()
-
-        print("\n========== ESEWA PAYMENT ERROR ==========")
-        print(type(e).__name__, ":", str(e))
-        print("==========================================\n")
-
         target = (
             f"{settings.frontend_url.rstrip('/')}"
             f"/profile?payment=verification-pending"

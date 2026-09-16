@@ -1,2 +1,52 @@
-import {Link,NavLink} from 'react-router-dom';import {ShoppingBag,UserRound,LogOut} from 'lucide-react';import {useAuth} from '../context/AuthContext';import {useCart} from '../context/CartContext';
-export default function Layout({children}){const {user,logout}=useAuth(),{cart}=useCart();return <><header className="sticky top-0 z-10 border-b border-stone-200 bg-sand/95 backdrop-blur"><nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><Link to="/" className="text-2xl font-black tracking-tight text-ink">THREADLINE</Link><div className="hidden gap-6 md:flex"><NavLink to="/products">Shop</NavLink><a href="#story">Story</a></div><div className="flex items-center gap-4"><Link to="/cart" aria-label="Cart" className="relative"><ShoppingBag/><span className="absolute -right-2 -top-2 rounded-full bg-clay px-1.5 text-xs text-white">{cart.items?.length||0}</span></Link>{user?<><Link to="/profile"><UserRound/></Link>{user.role==='ADMIN'&&<Link to="/admin">Admin</Link>}<button onClick={logout}><LogOut size={19}/></button></>:<Link className="rounded-full bg-ink px-4 py-2 text-sm text-white" to="/login">Sign in</Link>}</div></nav></header><main>{children}</main><footer className="mt-16 bg-ink px-5 py-12 text-center text-sand">Thoughtful essentials, made for every day.</footer></>}
+import { Link, NavLink } from "react-router-dom";
+import { ShoppingBag, UserRound, LogOut } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
+export default function Layout({ children }) {
+  const { user, logout } = useAuth(),
+    { cart } = useCart();
+  return (
+    <>
+      <header className="sticky top-0 z-10 border-b border-stone-200 bg-sand/95 backdrop-blur">
+        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+          <Link to="/" className="text-2xl font-black tracking-tight text-ink">
+            THREADLINE
+          </Link>
+          <div className="hidden gap-6 md:flex">
+            <NavLink to="/products">Shop</NavLink>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link to="/cart" aria-label="Cart" className="relative">
+              <ShoppingBag />
+              <span className="absolute -right-2 -top-2 rounded-full bg-clay px-1.5 text-xs text-white">
+                {cart.items?.length || 0}
+              </span>
+            </Link>
+            {user ? (
+              <>
+                <Link to="/profile">
+                  <UserRound />
+                </Link>
+                {user.role === "ADMIN" && <Link to="/admin">Admin</Link>}
+                <button onClick={logout}>
+                  <LogOut size={19} />
+                </button>
+              </>
+            ) : (
+              <Link
+                className="rounded-full bg-ink px-4 py-2 text-sm text-white"
+                to="/login"
+              >
+                Sign in
+              </Link>
+            )}
+          </div>
+        </nav>
+      </header>
+      <main>{children}</main>
+      <footer className="mt-16 bg-ink px-5 py-12 text-center text-sand">
+        Thoughtful essentials, made for every day.
+      </footer>
+    </>
+  );
+}

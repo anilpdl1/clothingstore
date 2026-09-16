@@ -2,9 +2,9 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
+
 
 class Settings(BaseSettings):
     database_url: str = "mysql+pymysql://root@localhost/clothing_ecommerce"
@@ -25,4 +25,6 @@ class Settings(BaseSettings):
         env_file=(PROJECT_DIR / ".env", BACKEND_DIR / ".env"),
         extra="ignore",
     )
+
+
 settings = Settings()
