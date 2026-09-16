@@ -13,10 +13,20 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.dependencies.auth import current_user
-from app.models import CartItem, InteractionType, Order, OrderItem, OrderStatus, Payment, PaymentStatus, ProductVariant, User, UserInteraction
+from app.models import (
+    CartItem,
+    InteractionType,
+    Order,
+    OrderItem,
+    OrderStatus,
+    Payment,
+    PaymentStatus,
+    ProductVariant,
+    User,
+    UserInteraction,
+)
 from app.schemas.schemas import PaymentCreateIn
 from app.services.commerce import cart_summary, price, validate_checkout
-
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -28,7 +38,9 @@ def require_esewa_settings() -> None:
 
 def signature(fields: dict[str, object], names: str) -> str:
     message = ",".join(f"{name}={fields[name]}" for name in names.split(","))
-    digest = hmac.new(settings.esewa_secret_key.encode(), message.encode(), hashlib.sha256).digest()
+    digest = hmac.new(
+        settings.esewa_secret_key.encode(), message.encode(), hashlib.sha256
+    ).digest()
     return base64.b64encode(digest).decode()
 
 
@@ -43,11 +55,24 @@ def complete_payment(payment: Payment, reference_id: str, db: Session) -> None:
 
     order = payment.order
     for line in order.items:
-        variant = db.query(ProductVariant).filter_by(id=line.product_variant_id).with_for_update().first()
+        variant = (
+            db.query(ProductVariant)
+            .filter_by(id=line.product_variant_id)
+            .with_for_update()
+            .first()
+        )
         if not variant or variant.stock_quantity < line.quantity:
-            raise HTTPException(409, "Stock changed before payment confirmation; contact support")
+            raise HTTPException(
+                409, "Stock changed before payment confirmation; contact support"
+            )
         variant.stock_quantity -= line.quantity
-        db.add(UserInteraction(user_id=order.user_id, product_id=variant.product_id, event_type=InteractionType.PURCHASE))
+        db.add(
+            UserInteraction(
+                user_id=order.user_id,
+                product_id=variant.product_id,
+                event_type=InteractionType.PURCHASE,
+            )
+        )
 
     payment.gateway_reference_id = reference_id
     payment.status = PaymentStatus.PAID
@@ -57,7 +82,11 @@ def complete_payment(payment: Payment, reference_id: str, db: Session) -> None:
 
 
 @router.post("/create-order")
-def create_payment_order(data: PaymentCreateIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_payment_order(
+    data: PaymentCreateIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     require_esewa_settings()
     cart = validate_checkout(db, user.id, data.address_id)
     summary = cart_summary(db, user.id)
@@ -66,14 +95,27 @@ def create_payment_order(data: PaymentCreateIn, user: User = Depends(current_use
         user_id=user.id,
         address_id=data.address_id,
         order_number=f"ORD-{uuid.uuid4().hex[:10].upper()}",
-        subtotal=summary["subtotal"], discount=summary["discount"],
-        shipping_cost=summary["shipping"], total_amount=summary["total"],
+        subtotal=summary["subtotal"],
+        discount=summary["discount"],
+        shipping_cost=summary["shipping"],
+        total_amount=summary["total"],
     )
     db.add(order)
     db.flush()
     for item in cart.items:
         variant = item.variant
-        db.add(OrderItem(order_id=order.id, product_variant_id=variant.id, product_name=variant.product.name, size=variant.size, color=variant.color, quantity=item.quantity, unit_price=price(variant), total_price=price(variant) * item.quantity))
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                product_variant_id=variant.id,
+                product_name=variant.product.name,
+                size=variant.size,
+                color=variant.color,
+                quantity=item.quantity,
+                unit_price=price(variant),
+                total_price=price(variant) * item.quantity,
+            )
+        )
 
     total = amount_text(summary["total"])
     fields: dict[str, object] = {
@@ -89,36 +131,133 @@ def create_payment_order(data: PaymentCreateIn, user: User = Depends(current_use
         "signed_field_names": "total_amount,transaction_uuid,product_code",
     }
     fields["signature"] = signature(fields, str(fields["signed_field_names"]))
-    db.add(Payment(order_id=order.id, gateway_transaction_uuid=transaction_uuid, amount=summary["total"], currency="NPR", payment_method="ESEWA"))
+    db.add(
+        Payment(
+            order_id=order.id,
+            gateway_transaction_uuid=transaction_uuid,
+            amount=summary["total"],
+            currency="NPR",
+            payment_method="ESEWA",
+        )
+    )
     db.commit()
     return {"form_url": settings.esewa_form_url, "fields": fields, "currency": "NPR"}
+
 
 
 @router.get("/esewa/success", include_in_schema=False)
 def esewa_success(data: str = Query(...), db: Session = Depends(get_db)):
     try:
+        print("\n========== ESEWA SUCCESS CALLBACK ==========")
+        print("Received data:", data)
+
         payload = json.loads(base64.b64decode(data).decode())
+
+        print("Decoded payload:", payload)
+
         names = payload["signed_field_names"]
         received_signature = payload["signature"]
-        if not hmac.compare_digest(signature(payload, names), received_signature):
-            raise ValueError("invalid signature")
+
+        generated_signature = signature(payload, names)
+
+        print("Received signature:", received_signature)
+        print("Generated signature:", generated_signature)
+
+        if not hmac.compare_digest(
+            generated_signature,
+            received_signature
+        ):
+            raise ValueError("Invalid eSewa response signature")
+
         if payload.get("status") != "COMPLETE":
-            raise ValueError("payment was not completed")
-        payment = db.query(Payment).filter_by(gateway_transaction_uuid=payload["transaction_uuid"]).first()
-        if not payment or payload.get("product_code") != settings.esewa_product_code or Decimal(str(payload.get("total_amount"))) != Decimal(str(payment.amount)):
-            raise ValueError("payment does not match an order")
-        status = httpx.get(settings.esewa_status_url, params={"product_code": settings.esewa_product_code, "total_amount": amount_text(payment.amount), "transaction_uuid": payment.gateway_transaction_uuid}, timeout=15).json()
+            raise ValueError(
+                f"eSewa payment status is: {payload.get('status')}"
+            )
+
+        payment = (
+            db.query(Payment)
+            .filter_by(
+                gateway_transaction_uuid=payload["transaction_uuid"]
+            )
+            .first()
+        )
+
+        print("Payment found:", payment is not None)
+
+        if not payment:
+            raise ValueError("Payment record not found")
+
+        if payload.get("product_code") != settings.esewa_product_code:
+            raise ValueError("Product code mismatch")
+
+        if Decimal(str(payload.get("total_amount"))) != Decimal(
+            str(payment.amount)
+        ):
+            raise ValueError(
+                f"Amount mismatch: "
+                f"eSewa={payload.get('total_amount')} "
+                f"database={payment.amount}"
+            )
+
+        print("Calling eSewa status API...")
+
+        response = httpx.get(
+            settings.esewa_status_url,
+            params={
+                "product_code": settings.esewa_product_code,
+                "total_amount": amount_text(payment.amount),
+                "transaction_uuid": payment.gateway_transaction_uuid,
+            },
+            timeout=15,
+        )
+
+        print("Status API HTTP status:", response.status_code)
+        print("Status API response:", response.text)
+
+        response.raise_for_status()
+
+        status = response.json()
+
         if status.get("status") != "COMPLETE":
-            raise ValueError("eSewa status could not be confirmed")
-        complete_payment(payment, str(payload.get("transaction_code", "")), db)
+            raise ValueError(
+                f"eSewa status verification failed: {status}"
+            )
+
+        print("eSewa payment verified successfully!")
+
+        complete_payment(
+            payment,
+            str(payload.get("transaction_code", "")),
+            db,
+        )
+
         db.commit()
-        target = f"{settings.frontend_url.rstrip('/')}/profile?payment=success"
-    except Exception:
+
+        print("Order updated successfully!")
+
+        target = (
+            f"{settings.frontend_url.rstrip('/')}"
+            f"/profile?payment=success"
+        )
+
+    except Exception as e:
         db.rollback()
-        target = f"{settings.frontend_url.rstrip('/')}/profile?payment=verification-pending"
+
+        print("\n========== ESEWA PAYMENT ERROR ==========")
+        print(type(e).__name__, ":", str(e))
+        print("==========================================\n")
+
+        target = (
+            f"{settings.frontend_url.rstrip('/')}"
+            f"/profile?payment=verification-pending"
+        )
+
     return RedirectResponse(target, status_code=303)
+
 
 
 @router.get("/esewa/failure", include_in_schema=False)
 def esewa_failure() -> RedirectResponse:
-    return RedirectResponse(f"{settings.frontend_url.rstrip('/')}/checkout?payment=failed", status_code=303)
+    return RedirectResponse(
+        f"{settings.frontend_url.rstrip('/')}/checkout?payment=failed", status_code=303
+    )

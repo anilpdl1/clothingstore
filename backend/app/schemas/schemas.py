@@ -1,6 +1,20 @@
-from pydantic import BaseModel, EmailStr, Field
+from email_validator import EmailNotValidError, validate_email
+from pydantic import BaseModel, EmailStr, Field, field_validator
 class RegisterIn(BaseModel): name:str=Field(min_length=2,max_length=120); email:EmailStr; password:str=Field(min_length=8,max_length=72); phone:str|None=None
-class LoginIn(BaseModel): email:EmailStr; password:str
+class LoginIn(BaseModel):
+    # The development seed accounts use the reserved `.test` domain.  EmailStr
+    # rejects that domain before the login handler runs, so validate email
+    # syntax with email-validator's explicit test-environment mode instead.
+    email:str
+    password:str
+
+    @field_validator("email")
+    @classmethod
+    def validate_login_email(cls,value:str):
+        try:
+            return validate_email(value,check_deliverability=False,test_environment=True).normalized
+        except EmailNotValidError as error:
+            raise ValueError(str(error)) from error
 class TokenOut(BaseModel): access_token:str; token_type:str="bearer"; role:str
 class CategoryIn(BaseModel): name:str; slug:str
 class VariantIn(BaseModel): size:str; color:str; sku:str; stock_quantity:int=Field(ge=0); price_override:float|None=None
